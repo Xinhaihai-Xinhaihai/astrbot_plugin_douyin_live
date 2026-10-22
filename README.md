@@ -55,6 +55,8 @@
 
 - `enabled`：启用开关
 - `trigger_words`：触发词列表（在面板里逐个添加，或在群里用「添加触发词」命令）
+- `sub_room_ids`：订阅直播间号 list，逐项填写房间号 / live.douyin.com 链接 / v.douyin.com 短链均可，保存/启动时会自动解析成房间号
+- `forward_groups`：转发群号 list，逐项填 QQ 群号，开播时推送到这些群
 - `reply_text`：开播配文
 - `not_live_text`：全部未开播时的回复，留空不回复
 - `poll_interval`：轮询间隔秒数（默认 300）

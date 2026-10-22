@@ -84,7 +84,36 @@ class DouyinLivePlugin(Star):
         logger.info("[douyin_live] 插件初始化")
         if self._store is None:
             self._reload_runtime()
+        await self._sync_from_config()
         self._start_polling()
+
+    async def _sync_from_config(self) -> None:
+        """把配置面板里订阅房间号 list / 转发群 list 同步进 store，并自动解析短链。"""
+        if self._store is None:
+            return
+        # 订阅房间号（支持短链，自动解析）
+        room_list = self._cfg_val("sub_room_ids", [])
+        if isinstance(room_list, (list, tuple)):
+            for item in room_list:
+                item = str(item or "").strip()
+                if not item:
+                    continue
+                room_id = DouyinLiveChecker.extract_room_id(item)
+                if not room_id:
+                    # 短链自动展开
+                    import re
+                    m = re.search(r"https?://v\.douyin\.com/[\w-]+", item)
+                    if m:
+                        room_id = await DouyinLiveChecker.resolve_short_link(m.group(0))
+                if room_id:
+                    await self._store.add_sub(room_id)
+        # 转发群
+        group_list = self._cfg_val("forward_groups", [])
+        if isinstance(group_list, (list, tuple)):
+            for gid in group_list:
+                gid = str(gid or "").strip()
+                if gid:
+                    await self._store.add_group(gid)
 
     async def terminate(self):
         await self._stop_polling()
@@ -138,7 +167,7 @@ class DouyinLivePlugin(Star):
                 # 尝试从 key 里解析
                 room_id = DouyinLiveChecker.extract_room_id(key)
                 if room_id:
-                    self._store.set_room_id(key, room_id)
+                    await self._store.set_room_id(key, room_id)
             if not room_id:
                 continue
             try:
@@ -146,7 +175,7 @@ class DouyinLivePlugin(Star):
             except Exception as e:
                 logger.warning("[douyin_live] 检测 %s 失败: %s", room_id, e)
                 continue
-            changed = self._store.set_live_state(key, status.live)
+            changed = await self._store.set_live_state(key, status.live)
             if status.live and changed:
                 logger.info("[douyin_live] %s(%s) 开播: %s", key, room_id, status.title[:30])
                 if groups:
@@ -224,7 +253,7 @@ class DouyinLivePlugin(Star):
         if short:
             room_id = await DouyinLiveChecker.resolve_short_link(short.group(0))
             if room_id:
-                if self._store.add_sub(room_id):
+                if await self._store.add_sub(room_id):
                     yield event.plain_result(f"订阅直播成功（房间号 {room_id}）")
                 else:
                     yield event.plain_result(f"房间 {room_id} 已订阅过")
@@ -238,7 +267,7 @@ class DouyinLivePlugin(Star):
                 "例：订阅 82685125012"
             )
             return
-        if self._store.add_sub(room_id):
+        if await self._store.add_sub(room_id):
             yield event.plain_result(f"订阅直播成功（直播间 {room_id}）")
         else:
             yield event.plain_result(f"直播间 {room_id} 已订阅过")
@@ -251,7 +280,7 @@ class DouyinLivePlugin(Star):
         if not room_id:
             yield event.plain_result("用法：取消订阅 <直播间号>")
             return
-        if self._store.remove_sub(room_id):
+        if await self._store.remove_sub(room_id):
             yield event.plain_result(f"已取消订阅 {room_id}，不再提醒")
         else:
             yield event.plain_result(f"没有订阅 {room_id}")
@@ -317,7 +346,7 @@ class DouyinLivePlugin(Star):
         if not gid:
             yield event.plain_result("用法：直播转发 <群号>")
             return
-        if self._store.add_group(gid):
+        if await self._store.add_group(gid):
             yield event.plain_result(f"已添加转发群 {gid}，开播时会推送到该群")
         else:
             yield event.plain_result(f"群 {gid} 已在转发列表")
@@ -329,7 +358,7 @@ class DouyinLivePlugin(Star):
         if not gid:
             yield event.plain_result("用法：取消转发 <群号>")
             return
-        if self._store.remove_group(gid):
+        if await self._store.remove_group(gid):
             yield event.plain_result(f"已移除转发群 {gid}")
         else:
             yield event.plain_result(f"群 {gid} 不在转发列表")

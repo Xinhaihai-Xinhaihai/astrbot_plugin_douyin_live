@@ -16,6 +16,18 @@
         "default": ["看看腿"],
         "hint": "群聊消息里包含其中任意一个词时，即时检查已订阅主播并回复正在直播的。在下方逐个添加。"
     },
+    "sub_room_ids": {
+        "description": "订阅直播间号",
+        "type": "list",
+        "default": [],
+        "hint": "要订阅的直播间号（可填房间号、live.douyin.com/xxx 链接、或 v.douyin.com 短链，保存时会自动解析成房间号）。"
+    },
+    "forward_groups": {
+        "description": "转发群号",
+        "type": "list",
+        "default": [],
+        "hint": "主播开播时推送到这些群的群号（QQ 群号数字）。"
+    },
     "reply_text": {
         "description": "开播配文",
         "type": "string",

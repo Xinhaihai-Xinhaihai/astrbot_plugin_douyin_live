@@ -231,18 +231,39 @@ class DouyinLiveChecker:
         )
 
     async def _check_browser(self, room_id: str) -> LiveStatus:
-        """浏览器渲染 live.douyin.com/{room_id}/ 判断开播."""
+        """浏览器渲染 live.douyin.com/{room_id}/ 判断开播（含整体超时保护，避免卡死事件循环）."""
+        try:
+            return await asyncio.wait_for(
+                self._check_browser_inner(room_id),
+                timeout=45,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("浏览器检查直播间 %s 超时", room_id)
+            return LiveStatus(
+                room_id=room_id,
+                live=False,
+                raw={"error": "timeout"},
+            )
+
+    async def _check_browser_inner(self, room_id: str) -> LiveStatus:
         await self._ensure_browser()
         ctx = await self._new_context()
+        info: dict = {}
         try:
             page = await ctx.new_page()
             url = f"https://live.douyin.com/{room_id}/"
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                await page.goto(url, wait_until="domcontentloaded", timeout=25000)
             except Exception as e:
                 logger.warning("打开直播间页面失败 %s: %s", room_id, e)
-            await page.wait_for_timeout(4000)
-            info: dict = await page.evaluate(_EVAL_JS)
+            try:
+                await page.wait_for_timeout(4000)
+            except Exception:
+                pass
+            try:
+                info = await page.evaluate(_EVAL_JS)
+            except Exception as e:
+                logger.warning("执行直播间页面 JS 失败 %s: %s", room_id, e)
         finally:
             try:
                 await ctx.close()
