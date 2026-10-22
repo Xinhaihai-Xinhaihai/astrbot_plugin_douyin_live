@@ -1,0 +1,7 @@
+name: astrbot_plugin_douyin_live
+desc: 抖音直播开播检测。订阅主播直播间号，每5分钟轮询开播状态，开播/下播自动推送到指定群。聊天中说"看看腿"等触发词也会即时检查并回复。
+short_desc: 抖音直播开播/下播检测推送
+version: v0.1.0
+author: 心海海
+repo: https://github.com/Xinhaihai-Xinhaihai/astrbot_plugin_douyin_live
+astrbot_version: ">=4.16,<5"

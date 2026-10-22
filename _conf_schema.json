@@ -1,0 +1,62 @@
+{
+    "_basic_section": {
+        "description": "=== 基本设置 ===",
+        "type": "text",
+        "invisible": true
+    },
+    "enabled": {
+        "description": "启用插件",
+        "type": "bool",
+        "default": true,
+        "hint": "关闭后不监听触发词、不轮询。"
+    },
+    "trigger_words": {
+        "description": "触发词",
+        "type": "string",
+        "default": "看看腿,看腿,腿呢,想看腿,来点腿,腿",
+        "hint": "消息包含这些词且已有订阅时，回复正在直播的主播。逗号分隔。"
+    },
+    "reply_text": {
+        "description": "开播配文",
+        "type": "string",
+        "default": "看吧色鬼！",
+        "hint": "发送直播间封面时附带的文字。"
+    },
+    "not_live_text": {
+        "description": "未开播回复",
+        "type": "string",
+        "default": "都还没开播呢，急什么～",
+        "hint": "所有订阅主播都未开播时的回复。留空则不回复。"
+    },
+    "poll_interval": {
+        "description": "轮询间隔秒数",
+        "type": "int",
+        "default": 300,
+        "slider": {"min": 60, "max": 3600, "step": 30},
+        "hint": "每 N 秒轮询一次全部订阅主播的开播状态，开播时推送到转发群。建议 300。"
+    },
+    "fetch_cover": {
+        "description": "发送直播封面图",
+        "type": "bool",
+        "default": true,
+        "hint": "发送直播间链接时同时带上封面图。"
+    },
+
+    "_auth_section": {
+        "description": "=== 登录与浏览器 ===",
+        "type": "text",
+        "invisible": true
+    },
+    "ttwid": {
+        "description": "ttwid cookie（可选）",
+        "type": "string",
+        "default": "",
+        "hint": "浏览器登录抖音后，开发者工具-应用程序-Cookie-live.douyin.com 里 ttwid 的值。填了更不容易被风控拦，留空也能用。"
+    },
+    "browser_channel": {
+        "description": "无头浏览器",
+        "type": "string",
+        "default": "msedge",
+        "hint": "msedge=系统 Edge；留空=Playwright Chromium（需先 playwright install chromium）。"
+    }
+}
