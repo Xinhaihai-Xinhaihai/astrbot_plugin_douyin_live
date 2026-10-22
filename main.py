@@ -208,16 +208,30 @@ class DouyinLivePlugin(Star):
 
     @filter.command("订阅")
     async def sub_cmd(self, event: AstrMessageEvent, target: str = ""):
-        """订阅 <直播间号或主页链接>"""
+        """订阅 <直播间号/直播间链接/手机分享整段文本>。
+
+        手机分享文本（含 v.douyin.com 短链）可直接整条粘进来，自动展开拿房间号。
+        """
+        import re
+
         self._remember_platform(event)
-        target = (target or "").strip()
-        if not target:
-            yield event.plain_result("用法：订阅 <直播间号或主页链接>\n例：订阅 82685125012")
+        msg = (event.get_message_str() or "").strip()
+        short = re.search(r"https?://v\.douyin\.com/[\w-]+", msg)
+        if short:
+            room_id = await DouyinLiveChecker.resolve_short_link(short.group(0))
+            if room_id:
+                if self._store.add_sub(room_id):
+                    yield event.plain_result(f"已订阅房间 {room_id}（来自分享链接）")
+                else:
+                    yield event.plain_result(f"房间 {room_id} 已订阅过")
+                return
+            yield event.plain_result("分享链接解析失败，换个短链试试")
             return
-        room_id = DouyinLiveChecker.extract_room_id(target)
+        room_id = DouyinLiveChecker.extract_room_id((target or msg).strip())
         if not room_id:
             yield event.plain_result(
-                "解析失败，请发直播间号（纯数字）或直播间/主页链接"
+                "用法：订阅 <直播间号 或 直播间链接 或 手机分享整段文本>\n"
+                "例：订阅 82685125012"
             )
             return
         if self._store.add_sub(room_id):

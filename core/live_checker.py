@@ -135,11 +135,19 @@ class DouyinLiveChecker:
 
     @staticmethod
     def extract_room_id(text: str) -> str:
-        """从直播间链接 / 主页链接 / 纯数字中提取直播间号."""
+        """从直播间链接 / 分享短链 / 纯数字中提取房间号."""
         text = (text or "").strip()
         if text.isdigit():
             return text
+        # 手机分享短链展开后：webcast.amemv.com/douyin/webcast/reflow/{19位}
+        m = re.search(r"webcast\.amemv\.com/douyin/webcast/reflow/(\d+)", text)
+        if m:
+            return m.group(1)
         m = re.search(r"live\.douyin\.com/(\d+)", text)
+        if m:
+            return m.group(1)
+        # 兜底：任意 19 位数字（抖音房间 id）
+        m = re.search(r"(?<!\d)(\d{19})(?!\d)", text)
         if m:
             return m.group(1)
         # 主页链接：/user/{sec_uid} 或短链 /{sec_uid}
@@ -148,11 +156,82 @@ class DouyinLiveChecker:
             return m.group(1)
         return ""
 
+    @staticmethod
+    async def resolve_short_link(short_url: str) -> str:
+        """把 v.douyin.com 短链解析成房间号（HTTP 跟随重定向，无需浏览器）."""
+        import aiohttp
+
+        short_url = (short_url or "").strip()
+        m = re.search(r"https?://v\.douyin\.com/[\w-]+", short_url)
+        if not m:
+            return ""
+        url = m.group(0)
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(
+                    url,
+                    headers={"User-Agent": USER_AGENT},
+                    allow_redirects=True,
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as r:
+                    final = str(r.url)
+            return DouyinLiveChecker.extract_room_id(final)
+        except Exception as e:
+            logger.warning("短链解析失败 %s: %s", url, e)
+            return ""
+
     async def check(self, room_id: str) -> LiveStatus:
-        """检查一个直播间当前是否开播."""
+        """检查一个房间当前是否开播.
+
+        - 19 位房间 id（手机分享链接解析出来的）→ 走 reflow 页面 HTTP 检测，
+          无需浏览器，快且稳。
+        - 其他（live.douyin.com 的 12 位左右直播间号）→ 浏览器渲染检测。
+        """
         room_id = (room_id or "").strip()
         if not room_id:
-            raise ValueError("直播间号为空")
+            raise ValueError("房间号为空")
+        if room_id.isdigit() and len(room_id) >= 18:
+            return await self._check_reflow_http(room_id)
+        return await self._check_browser(room_id)
+
+    async def _check_reflow_http(self, room_id: str) -> LiveStatus:
+        """HTTP 拉 reflow 分享页判断开播（仅适用于 19 位房间 id）."""
+        import aiohttp
+
+        url = f"https://webcast.amemv.com/douyin/webcast/reflow/{room_id}"
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(
+                    url,
+                    headers={
+                        "User-Agent": USER_AGENT,
+                        "Cookie": f"ttwid={self.ttwid}" if self.ttwid else "",
+                        "Referer": "https://live.douyin.com/",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=20),
+                ) as r:
+                    text = await r.text()
+        except Exception as e:
+            logger.warning("reflow 请求失败 %s: %s", room_id, e)
+            return LiveStatus(room_id=room_id, live=False, raw={"error": str(e)})
+
+        live = ("直播中" in text) or ("观看直播" in text)
+        offline = any(k in text for k in ("未开播", "已结束", "直播回放", "主播暂未"))
+        cover_m = re.search(
+            r'(https?://[^"\\\s]+?douyinpic[^"\\\s]*?/(?:720x720|500x500|400x400)[^"\\\s]*)',
+            text,
+        )
+        return LiveStatus(
+            room_id=room_id,
+            live=live and not offline,
+            title="",
+            nickname="",
+            cover=cover_m.group(1) if cover_m else "",
+            raw={"method": "reflow_http", "len": len(text)},
+        )
+
+    async def _check_browser(self, room_id: str) -> LiveStatus:
+        """浏览器渲染 live.douyin.com/{room_id}/ 判断开播."""
         await self._ensure_browser()
         ctx = await self._new_context()
         try:
