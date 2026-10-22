@@ -197,10 +197,10 @@ class DouyinLiveChecker:
         if not room_id:
             raise ValueError("房间号为空")
         if room_id.isdigit() and len(room_id) >= 18:
-            return await self._check_reflow_http(room_id)
+            return await self._check_reflow_http(room_id, expected_nickname)
         return await self._check_browser(room_id, expected_nickname)
 
-    async def _check_reflow_http(self, room_id: str) -> LiveStatus:
+    async def _check_reflow_http(self, room_id: str, expected_nickname: str = "") -> LiveStatus:
         """HTTP 拉 reflow 分享页判断开播（仅适用于 19 位房间 id）."""
         import aiohttp
 
@@ -225,6 +225,9 @@ class DouyinLiveChecker:
         # （reflow 分享页在预约/预告/刚结束时也可能残留按钮文案，双重校验避免误判）
         live = ("直播中" in text) and ("观看直播" in text)
         offline = any(k in text for k in ("未开播", "已结束", "直播回放", "主播暂未", "暂未开播", "暂无直播", "直播已结束"))
+        # 昵称校验：若指定预期昵称，但页面不含它，判为路由错位/未开播
+        if live and expected_nickname and expected_nickname.strip().lower() not in text.lower():
+            live = False
         cover_m = re.search(
             r'(https?://[^"\\\s]+?douyinpic[^"\\\s]*?/(?:720x720|500x500|400x400)[^"\\\s]*)',
             text,
