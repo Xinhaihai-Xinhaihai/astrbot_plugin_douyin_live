@@ -1,20 +1,7 @@
 name: astrbot_plugin_douyin_live
-display_name: 抖音直播开播检测
 desc: 抖音直播开播检测。订阅主播直播间（支持手机分享链接整段粘贴），自动轮询开播状态，开播/下播自动推送到指定群。聊天中说"看看腿"等触发词也会即时检查并回复正在直播的主播。
 short_desc: 抖音直播开播/下播检测推送
-help: 用法：
-订阅 <直播间号 或 直播间链接 或 手机分享整段文本>
-取消订阅 <直播间号>
-订阅列表
-直播转发 <群号>
-取消转发 <群号>
-转发列表
-说明：手机 App 分享出来的链接（v.douyin.com 短链）可直接整条粘给插件，会自动解析出房间号；live.douyin.com 的直播间号也可以直接订阅。检测默认使用系统 Edge 无头浏览器。
 version: v0.2.0
 author: 心海海
 repo: https://github.com/Xinhaihai-Xinhaihai/astrbot_plugin_douyin_live
-category: 娱乐
-tags:
-  - 抖音
-  - 直播
 astrbot_version: ">=4.16,<5"
