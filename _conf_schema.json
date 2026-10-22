@@ -20,7 +20,7 @@
         "description": "订阅直播间号",
         "type": "list",
         "default": [],
-        "hint": "要订阅的直播间号（可填房间号、live.douyin.com/xxx 链接、或 v.douyin.com 短链，保存时会自动解析成房间号）。"
+        "hint": "要订阅的直播间：可填房间号、live.douyin.com/xxx 链接、v.douyin.com 短链，或直接填抖音号（如 Lianmin726），保存/启动时会自动解析成房间号并用作昵称校验。"
     },
     "forward_groups": {
         "description": "转发群号",

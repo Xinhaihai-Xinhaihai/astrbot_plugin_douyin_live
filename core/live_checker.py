@@ -159,6 +159,61 @@ class DouyinLiveChecker:
         return ""
 
     @staticmethod
+    async def lock_room_by_short_id(short_id: str) -> tuple[str, str]:
+        """通过抖音号（如 Lianmin726）锁定直播间号。
+
+        用无头浏览器访问 https://www.douyin.com/user/{short_id}，
+        从页面 HTML 里提取 web_rid 作为直播间号，同时返回该号的展示昵称（可能为空）。
+
+        返回 (room_id, nickname)。失败时 room_id 为空。
+        """
+        short_id = (short_id or "").strip()
+        if not short_id:
+            return "", ""
+        try:
+            from playwright.async_api import async_playwright
+
+            pw = await async_playwright().start()
+            try:
+                browser = await pw.chromium.launch(
+                    channel="msedge",
+                    headless=True,
+                    args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+                )
+                ctx = await browser.new_context(
+                    user_agent=USER_AGENT,
+                    locale="zh-CN",
+                    viewport={"width": 1280, "height": 900},
+                )
+                page = await ctx.new_page()
+                url = f"https://www.douyin.com/user/{short_id}"
+                try:
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                except Exception as e:
+                    logger.warning("打开抖音主页失败 %s: %s", short_id, e)
+                await page.wait_for_timeout(5000)
+                html = await page.content()
+                # 提取 web_rid
+                m = re.search(r"web_rid=([0-9]+)", html)
+                room_id = m.group(1) if m else ""
+                # 尝试从 title 拿昵称
+                nick = ""
+                tm = re.search(r"<title>(.*?)</title>", html, re.S)
+                if tm:
+                    nick = tm.group(1).strip()[:40]
+                await ctx.close()
+                await browser.close()
+                return room_id, nick
+            finally:
+                try:
+                    await pw.stop()
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning("通过抖音号锁定直播间失败 %s: %s", short_id, e)
+            return "", ""
+
+    @staticmethod
     async def resolve_short_link(short_url: str) -> str:
         """把 v.douyin.com 短链解析成房间号（HTTP 跟随重定向，无需浏览器）."""
         import aiohttp

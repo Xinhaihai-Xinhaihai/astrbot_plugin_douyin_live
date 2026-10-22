@@ -86,6 +86,21 @@ class SubscriptionStore:
         await self.save()
         return True
 
+    async def upsert_sub(self, key: str, nickname: str = "") -> bool:
+        """写入订阅（已存在则更新昵称），返回是否新添加。"""
+        key = (key or "").strip()
+        if not key:
+            return False
+        is_new = key not in self.data["subs"]
+        self.data["subs"][key] = {
+            "nickname": nickname,
+            "room_id": "",
+            "live_state": self.data["subs"].get(key, {}).get("live_state", 0) if key in self.data["subs"] else 0,
+            "last_notify": 0,
+        }
+        await self.save()
+        return is_new
+
     async def remove_sub(self, key: str) -> bool:
         key = (key or "").strip()
         if key in self.data["subs"]:

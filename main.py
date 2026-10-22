@@ -91,20 +91,26 @@ class DouyinLivePlugin(Star):
         """把配置面板里订阅房间号 list / 转发群 list 同步进 store，并自动解析短链。"""
         if self._store is None:
             return
-        # 订阅房间号（支持短链，自动解析）
+        # 订阅房间号（支持直播间号 / 链接 / 短链 / 抖音号，自动解析）
         room_list = self._cfg_val("sub_room_ids", [])
         if isinstance(room_list, (list, tuple)):
             for item in room_list:
                 item = str(item or "").strip()
                 if not item:
                     continue
+                import re
                 room_id = DouyinLiveChecker.extract_room_id(item)
                 if not room_id:
                     # 短链自动展开
-                    import re
                     m = re.search(r"https?://v\.douyin\.com/[\w-]+", item)
                     if m:
                         room_id = await DouyinLiveChecker.resolve_short_link(m.group(0))
+                if not room_id and re.fullmatch(r"[A-Za-z0-9_]+", item) and not item.isdigit():
+                    # 抖音号：无头浏览器锁定直播间
+                    room_id, _ = await DouyinLiveChecker.lock_room_by_short_id(item)
+                    if room_id:
+                        await self._store.upsert_sub(room_id, nickname=item)
+                        continue
                 if room_id:
                     await self._store.add_sub(room_id)
         # 转发群
@@ -260,11 +266,26 @@ class DouyinLivePlugin(Star):
                 return
             yield event.plain_result("分享链接解析失败，换个短链试试")
             return
-        room_id = DouyinLiveChecker.extract_room_id((target or msg).strip())
+        raw = (target or msg).strip()
+        # 抖音号：非纯数字且不含链接，走浏览器锁定
+        is_short_id = raw and raw.isalnum() and not raw.isdigit() and not re.search(r"[./:]", raw)
+        if is_short_id:
+            yield event.plain_result(f"正在通过抖音号 {raw} 定位直播间…")
+            room_id, nick = await DouyinLiveChecker.lock_room_by_short_id(raw)
+            if not room_id:
+                yield event.plain_result(f"通过抖音号 {raw} 定位直播间失败，换个方式试试")
+                return
+            if await self._store.upsert_sub(room_id, nickname=raw):
+                yield event.plain_result(f"订阅直播成功（抖音号 {raw}，直播间 {room_id}）")
+            else:
+                yield event.plain_result(f"直播间 {room_id} 已订阅过（抖音号 {raw}）")
+            return
+        room_id = DouyinLiveChecker.extract_room_id(raw)
         if not room_id:
             yield event.plain_result(
-                "用法：订阅 <直播间号 或 直播间链接 或 手机分享整段文本>\n"
-                "例：订阅 82685125012"
+                "用法：订阅 <直播间号 或 直播间链接 或 手机分享整段文本 或 抖音号>\n"
+                "例：订阅 82685125012\n"
+                "例：订阅 Lianmin726  （用抖音号自动定位直播间）"
             )
             return
         if await self._store.add_sub(room_id):
