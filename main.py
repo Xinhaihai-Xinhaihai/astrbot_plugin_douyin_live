@@ -71,8 +71,12 @@ class DouyinLivePlugin(Star):
         return bool(self._cfg_val("enabled", True))
 
     def _trigger_words(self) -> list[str]:
-        raw = str(self._cfg_val("trigger_words", "") or "")
-        return [w.strip() for w in raw.replace("，", ",").split(",") if w.strip()]
+        raw = self._cfg_val("trigger_words", [])
+        if isinstance(raw, (list, tuple)):
+            return [str(w).strip() for w in raw if str(w).strip()]
+        # 兼容旧版逗号分隔字符串
+        s = str(raw or "")
+        return [w.strip() for w in s.replace("，", ",").split(",") if w.strip()]
 
     # ================= 生命周期 =================
 
@@ -221,7 +225,7 @@ class DouyinLivePlugin(Star):
             room_id = await DouyinLiveChecker.resolve_short_link(short.group(0))
             if room_id:
                 if self._store.add_sub(room_id):
-                    yield event.plain_result(f"已订阅房间 {room_id}（来自分享链接）")
+                    yield event.plain_result(f"订阅直播成功（房间号 {room_id}）")
                 else:
                     yield event.plain_result(f"房间 {room_id} 已订阅过")
                 return
@@ -235,7 +239,7 @@ class DouyinLivePlugin(Star):
             )
             return
         if self._store.add_sub(room_id):
-            yield event.plain_result(f"已订阅直播间 {room_id}")
+            yield event.plain_result(f"订阅直播成功（直播间 {room_id}）")
         else:
             yield event.plain_result(f"直播间 {room_id} 已订阅过")
 
@@ -248,7 +252,7 @@ class DouyinLivePlugin(Star):
             yield event.plain_result("用法：取消订阅 <直播间号>")
             return
         if self._store.remove_sub(room_id):
-            yield event.plain_result(f"已取消订阅 {room_id}")
+            yield event.plain_result(f"已取消订阅 {room_id}，不再提醒")
         else:
             yield event.plain_result(f"没有订阅 {room_id}")
 
@@ -262,6 +266,49 @@ class DouyinLivePlugin(Star):
         lines = [f"{k} -> {'直播中' if v.get('live_state') else '未开播'}" for k, v in subs]
         yield event.plain_result("当前订阅：\n" + "\n".join(lines))
 
+    @filter.command("添加触发词")
+    async def add_trigger_word(self, event: AstrMessageEvent, word: str = ""):
+        """添加触发词 <词>：逐个添加"""
+        self._remember_platform(event)
+        word = (word or "").strip()
+        if not word:
+            yield event.plain_result("用法：添加触发词 <词>")
+            return
+        words = self._trigger_words()
+        if word in words:
+            yield event.plain_result(f"触发词「{word}」已存在")
+            return
+        words.append(word)
+        self.cfg["trigger_words"] = words
+        self.cfg.save_config()
+        yield event.plain_result(f"已添加触发词「{word}」，当前共 {len(words)} 个")
+
+    @filter.command("删除触发词")
+    async def del_trigger_word(self, event: AstrMessageEvent, word: str = ""):
+        """删除触发词 <词>"""
+        self._remember_platform(event)
+        word = (word or "").strip()
+        if not word:
+            yield event.plain_result("用法：删除触发词 <词>")
+            return
+        words = self._trigger_words()
+        if word not in words:
+            yield event.plain_result(f"触发词「{word}」不存在")
+            return
+        words.remove(word)
+        self.cfg["trigger_words"] = words
+        self.cfg.save_config()
+        yield event.plain_result(f"已删除触发词「{word}」，剩余：{'、'.join(words) if words else '无'}")
+
+    @filter.command("触发词列表")
+    async def trigger_list_cmd(self, event: AstrMessageEvent):
+        """查看当前全部触发词"""
+        words = self._trigger_words()
+        if not words:
+            yield event.plain_result("还没有配置触发词")
+            return
+        yield event.plain_result("触发词：" + "、".join(words))
+
     @filter.command("直播转发")
     async def forward_cmd(self, event: AstrMessageEvent, gid: str = ""):
         """直播转发 <群号>：把开播推送转发到该群"""
@@ -271,7 +318,7 @@ class DouyinLivePlugin(Star):
             yield event.plain_result("用法：直播转发 <群号>")
             return
         if self._store.add_group(gid):
-            yield event.plain_result(f"已添加转发群 {gid}")
+            yield event.plain_result(f"已添加转发群 {gid}，开播时会推送到该群")
         else:
             yield event.plain_result(f"群 {gid} 已在转发列表")
 

@@ -12,9 +12,9 @@
     },
     "trigger_words": {
         "description": "触发词",
-        "type": "string",
-        "default": "看看腿,看腿,腿呢,想看腿,来点腿,腿",
-        "hint": "消息包含这些词且已有订阅时，回复正在直播的主播。逗号分隔。"
+        "type": "list",
+        "default": ["看看腿"],
+        "hint": "群聊消息里包含其中任意一个词时，即时检查已订阅主播并回复正在直播的。在下方逐个添加。"
     },
     "reply_text": {
         "description": "开播配文",
@@ -51,7 +51,7 @@
         "description": "ttwid cookie（可选）",
         "type": "string",
         "default": "",
-        "hint": "浏览器登录抖音后，开发者工具-应用程序-Cookie-live.douyin.com 里 ttwid 的值。填了更不容易被风控拦，留空也能用。"
+        "hint": "浏览器登录抖音后，开发者工具-应用程序-Cookie 里 ttwid 的值。填了更不容易被风控拦，留空也能用。"
     },
     "browser_channel": {
         "description": "无头浏览器",
