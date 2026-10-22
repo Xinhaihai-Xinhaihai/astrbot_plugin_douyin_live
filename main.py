@@ -171,7 +171,7 @@ class DouyinLivePlugin(Star):
             if not room_id:
                 continue
             try:
-                status = await self._do_check(room_id)
+                status = await self._do_check(room_id, nickname=str(sub.get("nickname", "")))
             except Exception as e:
                 logger.warning("[douyin_live] 检测 %s 失败: %s", room_id, e)
                 continue
@@ -181,9 +181,9 @@ class DouyinLivePlugin(Star):
                 if groups:
                     await self._broadcast_live(groups, key, status)
 
-    async def _do_check(self, room_id: str) -> LiveStatus:
+    async def _do_check(self, room_id: str, nickname: str = "") -> LiveStatus:
         assert self._checker is not None
-        return await self._checker.check(room_id)
+        return await self._checker.check(room_id, expected_nickname=nickname)
 
     # ================= 触发词监听 =================
 
@@ -224,7 +224,7 @@ class DouyinLivePlugin(Star):
             if not room_id:
                 continue
             try:
-                status = await self._do_check(room_id)
+                status = await self._do_check(room_id, nickname=str(sub.get("nickname", "")))
             except Exception:
                 continue
             if status.live:

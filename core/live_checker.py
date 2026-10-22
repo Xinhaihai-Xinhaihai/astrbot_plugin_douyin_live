@@ -27,9 +27,11 @@ _EVAL_JS = r"""
 () => {
   const t = document.body ? document.body.innerText : '';
   const title = document.title || '';
-  const offline = ['未开播','暂未开播','已结束','主播暂未','暂无直播','直播回放'].some(k => t.includes(k));
-  const live = ['在线观众','本场点赞','本场观众','全部商品'].some(k => t.includes(k))
-             || /的抖音直播间/.test(title);
+  const offline = ['未开播','暂未开播','已结束','主播暂未','暂无直播','直播回放','直播已结束'].some(k => t.includes(k));
+  // 开播判定：必须有"在线观众"+"本场点赞"两个特征，或标题严格匹配"xxx的抖音直播间"
+  const live = (t.includes('在线观众') && t.includes('本场点赞'))
+             || (t.includes('在线观众') && t.includes('人观看'))
+             || /的抖音直播间/.test(title) && !offline;
   const imgs = [...document.querySelectorAll('img')]
      .filter(i => i.src && !i.src.startsWith('data:'))
      .map(i => ({src: i.src, w: i.naturalWidth || i.width || 0, h: i.naturalHeight || i.height || 0}));
@@ -180,19 +182,23 @@ class DouyinLiveChecker:
             logger.warning("短链解析失败 %s: %s", url, e)
             return ""
 
-    async def check(self, room_id: str) -> LiveStatus:
+    async def check(self, room_id: str, expected_nickname: str = "") -> LiveStatus:
         """检查一个房间当前是否开播.
 
         - 19 位房间 id（手机分享链接解析出来的）→ 走 reflow 页面 HTTP 检测，
           无需浏览器，快且稳。
         - 其他（live.douyin.com 的 12 位左右直播间号）→ 浏览器渲染检测。
+
+        expected_nickname：可选的订阅者昵称。传入后，浏览器渲染到的页面昵称若
+        与它不一致（例如 live.douyin.com/{rid} 路由到别人页面），会被判为未开播，
+        避免借用他人页面误判。
         """
         room_id = (room_id or "").strip()
         if not room_id:
             raise ValueError("房间号为空")
         if room_id.isdigit() and len(room_id) >= 18:
             return await self._check_reflow_http(room_id)
-        return await self._check_browser(room_id)
+        return await self._check_browser(room_id, expected_nickname)
 
     async def _check_reflow_http(self, room_id: str) -> LiveStatus:
         """HTTP 拉 reflow 分享页判断开播（仅适用于 19 位房间 id）."""
@@ -215,8 +221,10 @@ class DouyinLiveChecker:
             logger.warning("reflow 请求失败 %s: %s", room_id, e)
             return LiveStatus(room_id=room_id, live=False, raw={"error": str(e)})
 
-        live = ("直播中" in text) or ("观看直播" in text)
-        offline = any(k in text for k in ("未开播", "已结束", "直播回放", "主播暂未"))
+        # 开播判定：必须同时命中"直播中"和"观看直播"，且不命中任何未播特征
+        # （reflow 分享页在预约/预告/刚结束时也可能残留按钮文案，双重校验避免误判）
+        live = ("直播中" in text) and ("观看直播" in text)
+        offline = any(k in text for k in ("未开播", "已结束", "直播回放", "主播暂未", "暂未开播", "暂无直播", "直播已结束"))
         cover_m = re.search(
             r'(https?://[^"\\\s]+?douyinpic[^"\\\s]*?/(?:720x720|500x500|400x400)[^"\\\s]*)',
             text,
@@ -230,11 +238,11 @@ class DouyinLiveChecker:
             raw={"method": "reflow_http", "len": len(text)},
         )
 
-    async def _check_browser(self, room_id: str) -> LiveStatus:
+    async def _check_browser(self, room_id: str, expected_nickname: str = "") -> LiveStatus:
         """浏览器渲染 live.douyin.com/{room_id}/ 判断开播（含整体超时保护，避免卡死事件循环）."""
         try:
             return await asyncio.wait_for(
-                self._check_browser_inner(room_id),
+                self._check_browser_inner(room_id, expected_nickname),
                 timeout=45,
             )
         except asyncio.TimeoutError:
@@ -245,7 +253,7 @@ class DouyinLiveChecker:
                 raw={"error": "timeout"},
             )
 
-    async def _check_browser_inner(self, room_id: str) -> LiveStatus:
+    async def _check_browser_inner(self, room_id: str, expected_nickname: str = "") -> LiveStatus:
         await self._ensure_browser()
         ctx = await self._new_context()
         info: dict = {}
@@ -270,12 +278,20 @@ class DouyinLiveChecker:
             except Exception:
                 pass
 
+        page_nick = info.get("nickname") or ""
+        page_title = info.get("liveTitle") or info.get("title") or ""
+        # 昵称校验：若指定了预期昵称，但页面昵称/标题都不含它，判定为路由错位/未开播
         live = bool(info.get("live")) and not bool(info.get("offline"))
+        if live and expected_nickname:
+            exp = expected_nickname.strip().lower()
+            has_nick = (exp in page_nick.lower()) or (exp in page_title.lower())
+            if not has_nick:
+                live = False
         return LiveStatus(
             room_id=room_id,
             live=live,
-            title=info.get("liveTitle") or info.get("title") or "",
-            nickname=info.get("nickname") or "",
+            title=page_title,
+            nickname=page_nick,
             cover=(info.get("covers") or [""])[0] if info.get("covers") else "",
             raw=info,
         )
